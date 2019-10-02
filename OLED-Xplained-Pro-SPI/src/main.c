@@ -44,21 +44,47 @@
 
 #define CLK_PIO				PIOA
 #define CLK_PIO_ID			ID_PIOA
-#define CLK_PIO_IDX			3u
+#define CLK_PIO_IDX			2
 #define CLK_PIO_IDX_MASK	(1u << CLK_PIO_IDX)
 
 #define SW_PIO				PIOA
 #define SW_PIO_ID			ID_PIOA
-#define SW_PIO_IDX			4u
+#define SW_PIO_IDX			24
 #define SW_PIO_IDX_MASK		(1u << SW_PIO_IDX)
 
+#define LED_PIO_ID	   ID_PIOA
+#define LED_PIO        PIOA
+#define LED_PIN		   0
+#define LED_PIN_MASK   (1<<LED_PIN)
+
+volatile Bool SW_flag = false;
+volatile Bool CLK_flag = false;
+volatile int Time = 0;
+
+void SW_init(void);
 void RTC_init(void);
+
+static void SW_Handler(void)
+{
+	SW_flag = !SW_flag;
+}
+
+static void CLK_Handler(void)
+{
+	CLK_flag = 1;
+}
+
+
 
 void update_screen(int hora, int minuto, int segundo) {
 	gfx_mono_ssd1306_init();
-	char time[64];
-	sprintf(time, "%02d:%02d:%02d", hora, minuto, segundo);
-	gfx_mono_draw_string(time, 2,16, &sysfont);
+	char buff[64];
+	sprintf(buff, "%02d:%02d:%02d %ds", hora, minuto, segundo, Time);
+	gfx_mono_draw_string(buff, 2,16, &sysfont);
+}
+
+void TimerDec(void) {
+	Time--;
 }
 
 void RTC_Handler(void)
@@ -79,6 +105,9 @@ void RTC_Handler(void)
 
 	
 	if ((ul_status & RTC_SR_SEC) == RTC_SR_SEC) {
+		if(SW_flag == true) {
+			TimerDec();
+		}
 		
 		update_screen(hora, minuto, segundo);
 		rtc_clear_status(RTC, RTC_SCCR_SECCLR);
@@ -90,6 +119,18 @@ void RTC_Handler(void)
 	rtc_clear_status(RTC, RTC_SCCR_TIMCLR);
 	rtc_clear_status(RTC, RTC_SCCR_CALCLR);
 	rtc_clear_status(RTC, RTC_SCCR_TDERRCLR);
+	
+}
+
+void SW_init(void) {
+	pmc_enable_periph_clk(SW_PIO_ID);
+	pio_set_input(SW_PIO, SW_PIO_IDX_MASK, PIO_PULLUP | PIO_DEBOUNCE);
+	
+	pio_enable_interrupt(SW_PIO, SW_PIO_IDX_MASK);
+	pio_handler_set(SW_PIO, SW_PIO_ID, SW_PIO_IDX_MASK, PIO_IT_FALL_EDGE, SW_Handler);
+	
+	NVIC_EnableIRQ(SW_PIO_ID);
+	NVIC_SetPriority(SW_PIO_ID, 2);
 	
 }
 
@@ -115,7 +156,28 @@ void RTC_init(){
 
 }
 
+void init(void)
+{
 
+	sysclk_init();
+	
+	WDT->WDT_MR = WDT_MR_WDDIS;
+	
+	pmc_enable_periph_clk(CLK_PIO_ID);
+	pio_set_input(CLK_PIO, CLK_PIO_IDX_MASK, PIO_DEBOUNCE);
+	
+	pio_enable_interrupt(CLK_PIO, CLK_PIO_IDX_MASK);
+	pio_handler_set(CLK_PIO, CLK_PIO_ID, CLK_PIO_IDX_MASK, PIO_IT_FALL_EDGE, CLK_Handler);
+	
+	NVIC_EnableIRQ(CLK_PIO_ID);
+	NVIC_SetPriority(CLK_PIO_ID, 2);
+}
+
+void LED_init(void) {
+	pmc_enable_periph_clk(LED_PIO_ID);
+	pio_set_output(LED_PIO, LED_PIN_MASK, 0, 0, 0 );
+	
+}
 
 int main (void)
 {
@@ -127,15 +189,29 @@ int main (void)
 	
 	delay_init();
 	
+	init();
 	RTC_init();
-	
+	SW_init();
+	LED_init();
 /*	gfx_mono_ssd1306_init();*/
 // 	gfx_mono_draw_filled_circle(20, 16, 16, GFX_PIXEL_SET, GFX_WHOLE);
 //    gfx_mono_draw_string("mundo", 50,16, &sysfont);
 
-
+	SW_flag = false;
+	CLK_flag = false;
   /* Insert application code here, after the board has been initialized. */
 	while(1) {
+		if(CLK_flag == true) {
+				Time++;
+			CLK_flag = false;
+		}
+		if(Time > 60) {
+			Time = 60;
+		}
+		if(Time == -1) {
+			Time = 0;
+			SW_flag = false;
+		}
 		pmc_sleep(SAM_PM_SMODE_SLEEP_WFI);
 	}
 }

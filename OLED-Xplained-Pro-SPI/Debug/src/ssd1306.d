@@ -160,7 +160,7 @@ src/ssd1306.d src/ssd1306.o: ../src/ssd1306.c ../src/ssd1306.h \
  ../src/ASF/sam/drivers/mpu/mpu.h ../src/ASF/sam/drivers/pmc/sleep.h \
  ../src/ASF/sam/drivers/rtc/rtc.h ../src/ASF/sam/utils/fpu/fpu.h \
  ../src/ASF/sam/boards/same70_xplained/led.h \
- ../src/ASF/sam/drivers/spi/spi.h \
+ ../src/ASF/sam/drivers/spi/spi.h ../src/ASF/sam/drivers/tc/tc.h \
  ../src/ASF/sam/drivers/pio/pio_handler.h ../src/config/conf_board.h
 
 ../src/ssd1306.h:
@@ -498,6 +498,8 @@ c:\program\ files\ (x86)\atmel\studio\7.0\toolchain\arm\arm-gnu-toolchain\arm-no
 ../src/ASF/sam/boards/same70_xplained/led.h:
 
 ../src/ASF/sam/drivers/spi/spi.h:
+
+../src/ASF/sam/drivers/tc/tc.h:
 
 ../src/ASF/sam/drivers/pio/pio_handler.h:
 

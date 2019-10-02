@@ -6,6 +6,8 @@ src\ASF\sam\drivers\rtc\rtc.c
 
 src\ASF\sam\drivers\spi\spi.c
 
+src\ASF\sam\drivers\tc\tc.c
+
 src\gfx_mono_framebuffer.c
 
 src\gfx_mono_generic.c

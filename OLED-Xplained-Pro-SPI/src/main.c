@@ -57,9 +57,15 @@
 #define LED_PIN		   0
 #define LED_PIN_MASK   (1<<LED_PIN)
 
+#define LED2_PIO_ID	    ID_PIOC
+#define LED2_PIO        PIOC
+#define LED2_PIN		30
+#define LED2_PIN_MASK   (1<<LED2_PIN)
+
 volatile Bool SW_flag = false;
 volatile Bool CLK_flag = false;
 volatile int Time = 0;
+volatile int terminado = 0;
 
 void SW_init(void);
 void RTC_init(void);
@@ -70,6 +76,8 @@ void pin_toggle(Pio *pio, uint32_t mask);
 static void SW_Handler(void)
 {
 	SW_flag = !SW_flag;
+	if(terminado == 1)
+		tc_stop(TC0, 0);
 }
 
 static void CLK_Handler(void)
@@ -111,6 +119,21 @@ void TC0_Handler(void){
 	pin_toggle(LED_PIO, LED_PIN_MASK);
 }
 
+void TC1_Handler(void){
+	volatile uint32_t ul_dummy;
+
+	/****************************************************************
+	* Devemos indicar ao TC que a interrupção foi satisfeita.
+	******************************************************************/
+	ul_dummy = tc_get_status(TC0, 1);
+
+	/* Avoid compiler warning */
+	UNUSED(ul_dummy);
+
+	/** Muda o estado do LED */
+	pin_toggle(LED2_PIO, LED2_PIN_MASK);
+}
+
 void RTC_Handler(void)
 {
 	uint32_t ul_status = rtc_get_status(RTC);
@@ -129,7 +152,8 @@ void RTC_Handler(void)
 	
 	
 	if ((ul_status & RTC_SR_ALARM) == RTC_SR_ALARM) {
-		TC_init(TC0, ID_TC0, 0, 6);
+	//	TC_init(TC0, ID_TC0, 0, 6);
+	//	tc_stop(TC0, 1);
 		rtc_clear_status(RTC, RTC_SCCR_ALRCLR);
 		SW_flag = false;
 	}
@@ -139,11 +163,15 @@ void RTC_Handler(void)
 			tc_stop(TC0, 0);
 		}
 		if(SW_flag == true) {
-			TimerDec();
-			if (Time == 60 ) {
-				rtc_set_time_alarm(RTC, 1, hora, 1, minuto+1, 1, segundo);
+			tc_start(TC0, 1);
+			if (Time == 0 ) {
+				TC_init(TC0, ID_TC0, 0, 6);
+				tc_stop(TC0, 1);
+				terminado = 1;
+				//rtc_set_time_alarm(RTC, 1, hora, 1, minuto+1, 1, segundo);
 			} else {
-				rtc_set_time_alarm(RTC, 1, hora, 1, minuto, 1, segundo+Time);
+				TimerDec();
+				//rtc_set_time_alarm(RTC, 1, hora, 1, minuto, 1, segundo+Time);
 			}
 			
 		}
@@ -246,6 +274,8 @@ void LED_init(int estado) {
 	pmc_enable_periph_clk(LED_PIO_ID);
 	pio_set_output(LED_PIO, LED_PIN_MASK, estado, 0, 0 );
 	
+	pmc_enable_periph_clk(LED2_PIO_ID);
+	pio_set_output(LED2_PIO, LED2_PIN_MASK, estado, 0, 0 );
 }
 
 int main (void)
@@ -262,6 +292,8 @@ int main (void)
 	RTC_init();
 	SW_init();
 	LED_init(1);
+	TC_init(TC0, ID_TC1, 1, 1);
+	tc_stop(TC0, 1);
 	
  
 

@@ -63,6 +63,9 @@ volatile int Time = 0;
 
 void SW_init(void);
 void RTC_init(void);
+void LED_init(int estado);
+void TC_init(Tc * TC, int ID_TC, int TC_CHANNEL, int freq);
+void pin_toggle(Pio *pio, uint32_t mask);
 
 static void SW_Handler(void)
 {
@@ -74,7 +77,12 @@ static void CLK_Handler(void)
 	CLK_flag = 1;
 }
 
-
+void pin_toggle(Pio *pio, uint32_t mask){
+	if(pio_get_output_data_status(pio, mask))
+	pio_clear(pio, mask);
+	else
+	pio_set(pio,mask);
+}
 
 void update_screen(int hora, int minuto, int segundo) {
 	gfx_mono_ssd1306_init();
@@ -85,6 +93,22 @@ void update_screen(int hora, int minuto, int segundo) {
 
 void TimerDec(void) {
 	Time--;
+}
+
+void TC0_Handler(void){
+	volatile uint32_t ul_dummy;
+
+	/****************************************************************
+	* Devemos indicar ao TC que a interrupção foi satisfeita.
+	******************************************************************/
+	ul_dummy = tc_get_status(TC0, 0);
+
+	/* Avoid compiler warning */
+	UNUSED(ul_dummy);
+
+	/* pin_toggle(BUZZER_PIO, BUZZER_PIO_IDX_MASK); */
+	
+	pin_toggle(LED_PIO, LED_PIN_MASK);
 }
 
 void RTC_Handler(void)
@@ -102,11 +126,26 @@ void RTC_Handler(void)
 	
 
 	rtc_get_time(RTC, &hora, &minuto , &segundo);
-
+	
+	
+	if ((ul_status & RTC_SR_ALARM) == RTC_SR_ALARM) {
+		TC_init(TC0, ID_TC0, 0, 6);
+		rtc_clear_status(RTC, RTC_SCCR_ALRCLR);
+		SW_flag = false;
+	}
 	
 	if ((ul_status & RTC_SR_SEC) == RTC_SR_SEC) {
+		if(SW_flag == true & Time == 0) {
+			tc_stop(TC0, 0);
+		}
 		if(SW_flag == true) {
 			TimerDec();
+			if (Time == 60 ) {
+				rtc_set_time_alarm(RTC, 1, hora, 1, minuto+1, 1, segundo);
+			} else {
+				rtc_set_time_alarm(RTC, 1, hora, 1, minuto, 1, segundo+Time);
+			}
+			
 		}
 		
 		update_screen(hora, minuto, segundo);
@@ -132,6 +171,36 @@ void SW_init(void) {
 	NVIC_EnableIRQ(SW_PIO_ID);
 	NVIC_SetPriority(SW_PIO_ID, 2);
 	
+}
+
+void TC_init(Tc * TC, int ID_TC, int TC_CHANNEL, int freq){
+	uint32_t ul_div;
+	uint32_t ul_tcclks;
+	uint32_t ul_sysclk = sysclk_get_cpu_hz();
+
+	uint32_t channel = 1;
+
+	/* Configura o PMC */
+	/* O TimerCounter é meio confuso
+	o uC possui 3 TCs, cada TC possui 3 canais
+	TC0 : ID_TC0, ID_TC1, ID_TC2
+	TC1 : ID_TC3, ID_TC4, ID_TC5
+	TC2 : ID_TC6, ID_TC7, ID_TC8
+	*/
+	pmc_enable_periph_clk(ID_TC);
+
+	/** Configura o TC para operar em  4Mhz e interrupçcão no RC compare */
+	tc_find_mck_divisor(freq, ul_sysclk, &ul_div, &ul_tcclks, ul_sysclk);
+	tc_init(TC, TC_CHANNEL, ul_tcclks | TC_CMR_CPCTRG);
+	tc_write_rc(TC, TC_CHANNEL, (ul_sysclk / ul_div) / freq);
+
+	/* Configura e ativa interrupçcão no TC canal 0 */
+	/* Interrupção no C */
+	NVIC_EnableIRQ((IRQn_Type) ID_TC);
+	tc_enable_interrupt(TC, TC_CHANNEL, TC_IER_CPCS);
+
+	/* Inicializa o canal 0 do TC */
+	tc_start(TC, TC_CHANNEL);
 }
 
 void RTC_init(){
@@ -173,9 +242,9 @@ void init(void)
 	NVIC_SetPriority(CLK_PIO_ID, 2);
 }
 
-void LED_init(void) {
+void LED_init(int estado) {
 	pmc_enable_periph_clk(LED_PIO_ID);
-	pio_set_output(LED_PIO, LED_PIN_MASK, 0, 0, 0 );
+	pio_set_output(LED_PIO, LED_PIN_MASK, estado, 0, 0 );
 	
 }
 
@@ -192,7 +261,10 @@ int main (void)
 	init();
 	RTC_init();
 	SW_init();
-	LED_init();
+	LED_init(1);
+	
+ 
+
 /*	gfx_mono_ssd1306_init();*/
 // 	gfx_mono_draw_filled_circle(20, 16, 16, GFX_PIXEL_SET, GFX_WHOLE);
 //    gfx_mono_draw_string("mundo", 50,16, &sysfont);
